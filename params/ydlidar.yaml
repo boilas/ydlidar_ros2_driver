@@ -8,8 +8,8 @@ ydlidar_ros2_driver_node:
     device_type: 0
     isSingleChannel: false
     intensity: false
-    intensity_bit: 0
     sample_rate: 9
+    intensity_bit: 0
     abnormal_check_count: 4
     fixed_resolution: true
     reversion: false
