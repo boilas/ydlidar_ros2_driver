@@ -1,6 +1,8 @@
 ﻿/*
  *  YDLIDAR SYSTEM
- *  YDLIDAR ROS 2 Node
+ *  YDLIDAR ROS 2 Node (PointCloud2 version)
+ *
+ *  Modified to publish sensor_msgs::msg::PointCloud2
  *
  *  Copyright 2017 - 2020 EAI TEAM
  *  http://www.eaibot.com
@@ -18,286 +20,279 @@
 #include <chrono>
 #include <iostream>
 #include <memory>
-
-#include "rclcpp/clock.hpp"
-#include "rclcpp/rclcpp.hpp"
-#include "rclcpp/time_source.hpp"
 #include "sensor_msgs/msg/laser_scan.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
-#include "sensor_msgs/msg/point_field.hpp"
+#include "sensor_msgs/point_cloud2_iterator.hpp"
 #include "std_srvs/srv/empty.hpp"
-#include <vector>
-#include <iostream>
-#include <string>
-#include <signal.h>
-#include <cstring>
+#include "rclcpp/rclcpp.hpp"
 
-#define ROS2Verision "1.0.1"
+#define ROS2_VERSION "1.0.1"
 
 int main(int argc, char *argv[]) {
   rclcpp::init(argc, argv);
-
   auto node = rclcpp::Node::make_shared("ydlidar_ros2_driver_node");
 
-  RCLCPP_INFO(node->get_logger(), "[YDLIDAR INFO] Current ROS Driver Version: %s\n", ((std::string)ROS2Verision).c_str());
+  RCLCPP_INFO(node->get_logger(), "[YDLIDAR INFO] Current ROS Driver Version: %s", ROS2_VERSION);
 
   CYdLidar laser;
-  std::string str_optvalue = "/dev/ydlidar";
-  node->declare_parameter<std::string>("port", "/dev/ttyUSB0");
+  // --- Parameter declarations and retrieval ---
+  std::string str_optvalue;
+  int int_optvalue;
+  bool bool_optvalue;
+  float float_optvalue;
+  std::string frame_id;
+
+  // serial port
+  str_optvalue = "/dev/ydlidar";
+  node->declare_parameter("port", str_optvalue);
   node->get_parameter("port", str_optvalue);
-  ///lidar port
   laser.setlidaropt(LidarPropSerialPort, str_optvalue.c_str(), str_optvalue.size());
 
-  ///ignore array
+  // ignore array
   str_optvalue = "";
-  node->declare_parameter<std::string>("ignore_array", "");
+  node->declare_parameter("ignore_array", str_optvalue);
   node->get_parameter("ignore_array", str_optvalue);
   laser.setlidaropt(LidarPropIgnoreArray, str_optvalue.c_str(), str_optvalue.size());
 
-  std::string frame_id = "laser_frame";
-  node->declare_parameter<std::string>("frame_id", "laser_frame");
+  // frame id
+  frame_id = "laser_frame";
+  node->declare_parameter("frame_id", frame_id);
   node->get_parameter("frame_id", frame_id);
 
-  //////////////////////int property/////////////////
-  /// lidar baudrate
-  int optval = 230400;
-  node->declare_parameter<int>("baudrate", 115200);
-  node->get_parameter("baudrate", optval);
-  laser.setlidaropt(LidarPropSerialBaudrate, &optval, sizeof(int));
-  /// tof lidar
-  optval = TYPE_TRIANGLE;
-  node->declare_parameter<int>("lidar_type", 1);
-  node->get_parameter("lidar_type", optval);
-  laser.setlidaropt(LidarPropLidarType, &optval, sizeof(int));
-  /// device type
-  optval = YDLIDAR_TYPE_SERIAL;
-  node->declare_parameter<int>("device_type", 0);
-  node->get_parameter("device_type", optval);
-  laser.setlidaropt(LidarPropDeviceType, &optval, sizeof(int));
-  /// sample rate
-  optval = 9;
-  node->declare_parameter<int>("sample_rate", 9);
-  node->get_parameter("sample_rate", optval);
-  laser.setlidaropt(LidarPropSampleRate, &optval, sizeof(int));
-  /// abnormal count
-  optval = 4;
-  node->declare_parameter<int>("abnormal_check_count", 4);
-  node->get_parameter("abnormal_check_count", optval);
-  laser.setlidaropt(LidarPropAbnormalCheckCount, &optval, sizeof(int));
+  // baudrate
+  int_optvalue = 230400;
+  node->declare_parameter("baudrate", int_optvalue);
+  node->get_parameter("baudrate", int_optvalue);
+  laser.setlidaropt(LidarPropSerialBaudrate, &int_optvalue, sizeof(int));
 
-  /// Intenstiy bit count
-  optval = 0;
-  node->declare_parameter<int>("intensity_bit", 0);
-  node->get_parameter("intensity_bit", optval);
-  laser.setlidaropt(LidarPropIntenstiyBit, &optval, sizeof(int));
-     
-  //////////////////////bool property/////////////////
-  /// fixed angle resolution
-  bool b_optvalue = false;
-  node->declare_parameter<bool>("fixed_resolution", true);
-  node->get_parameter("fixed_resolution", b_optvalue);
-  laser.setlidaropt(LidarPropFixedResolution, &b_optvalue, sizeof(bool));
-  /// rotate 180
-  b_optvalue = true;
-  node->declare_parameter<bool>("reversion", false);
-  node->get_parameter("reversion", b_optvalue);
-  laser.setlidaropt(LidarPropReversion, &b_optvalue, sizeof(bool));
-  /// Counterclockwise
-  b_optvalue = true;
-  node->declare_parameter<bool>("inverted", false);
-  node->get_parameter("inverted", b_optvalue);
-  laser.setlidaropt(LidarPropInverted, &b_optvalue, sizeof(bool));
-  b_optvalue = true;
-  node->declare_parameter<bool>("auto_reconnect", true);
-  node->get_parameter("auto_reconnect", b_optvalue);
-  laser.setlidaropt(LidarPropAutoReconnect, &b_optvalue, sizeof(bool));
-  /// one-way communication
-  b_optvalue = false;
-  node->declare_parameter<bool>("isSingleChannel", true);
-  node->get_parameter("isSingleChannel", b_optvalue);
-  laser.setlidaropt(LidarPropSingleChannel, &b_optvalue, sizeof(bool));
-  /// intensity
-  b_optvalue = false;
-  node->declare_parameter<bool>("intensity", false);
-  node->get_parameter("intensity", b_optvalue);
-  laser.setlidaropt(LidarPropIntenstiy, &b_optvalue, sizeof(bool));
-  /// Motor DTR
-  b_optvalue = false;
-  node->declare_parameter<bool>("support_motor_dtr", true);
-  node->get_parameter("support_motor_dtr", b_optvalue);
-  laser.setlidaropt(LidarPropSupportMotorDtrCtrl, &b_optvalue, sizeof(bool));
-  //是否启用调试
-  b_optvalue = false;
-  node->declare_parameter<bool>("debug", false);
-  node->get_parameter("debug", b_optvalue);
-  laser.setEnableDebug(b_optvalue);
+  // lidar type
+  int_optvalue = TYPE_TRIANGLE;
+  node->declare_parameter("lidar_type", int_optvalue);
+  node->get_parameter("lidar_type", int_optvalue);
+  laser.setlidaropt(LidarPropLidarType, &int_optvalue, sizeof(int));
 
-  //////////////////////float property/////////////////
-  /// unit: °
-  float f_optvalue = 180.0f;
-  node->declare_parameter<double>("angle_max", 180.0);
-  node->get_parameter("angle_max", f_optvalue);
-  laser.setlidaropt(LidarPropMaxAngle, &f_optvalue, sizeof(float));
-  f_optvalue = -180.0f;
-  node->declare_parameter<double>("angle_min", -180.0);
-  node->get_parameter("angle_min", f_optvalue);
-  laser.setlidaropt(LidarPropMinAngle, &f_optvalue, sizeof(float));
-  /// unit: m
-  f_optvalue = 64.f;
-  node->declare_parameter<double>("range_max", 16.0);
-  node->get_parameter("range_max", f_optvalue);
-  laser.setlidaropt(LidarPropMaxRange, &f_optvalue, sizeof(float));
-  f_optvalue = 0.1f;
-  node->declare_parameter<double>("range_min", 0.1);
-  node->get_parameter("range_min", f_optvalue);
-  laser.setlidaropt(LidarPropMinRange, &f_optvalue, sizeof(float));
-  /// unit: Hz
-  f_optvalue = 10.f;
-  node->declare_parameter<double>("frequency", 10.0);
-  node->get_parameter("frequency", f_optvalue);
-  laser.setlidaropt(LidarPropScanFrequency, &f_optvalue, sizeof(float));
+  // device type
+  int_optvalue = YDLIDAR_TYPE_SERIAL;
+  node->declare_parameter("device_type", int_optvalue);
+  node->get_parameter("device_type", int_optvalue);
+  laser.setlidaropt(LidarPropDeviceType, &int_optvalue, sizeof(int));
 
-  bool invalid_range_is_inf = false;
-  node->declare_parameter<bool>("invalid_range_is_inf", false);
-  node->get_parameter("invalid_range_is_inf", invalid_range_is_inf);
+  // sample rate
+  int_optvalue = 9;
+  node->declare_parameter("sample_rate", int_optvalue);
+  node->get_parameter("sample_rate", int_optvalue);
+  laser.setlidaropt(LidarPropSampleRate, &int_optvalue, sizeof(int));
 
-  //初始化
+  // abnormal check count
+  int_optvalue = 4;
+  node->declare_parameter("abnormal_check_count", int_optvalue);
+  node->get_parameter("abnormal_check_count", int_optvalue);
+  laser.setlidaropt(LidarPropAbnormalCheckCount, &int_optvalue, sizeof(int));
+
+  // intensity bit
+  int_optvalue = 0;
+  node->declare_parameter("intensity_bit", int_optvalue);
+  node->get_parameter("intensity_bit", int_optvalue);
+  laser.setlidaropt(LidarPropIntenstiyBit, &int_optvalue, sizeof(int));
+
+  // fixed resolution
+  bool_optvalue = false;
+  node->declare_parameter("fixed_resolution", bool_optvalue);
+  node->get_parameter("fixed_resolution", bool_optvalue);
+  laser.setlidaropt(LidarPropFixedResolution, &bool_optvalue, sizeof(bool));
+
+  // reversion
+  bool_optvalue = true;
+  node->declare_parameter("reversion", bool_optvalue);
+  node->get_parameter("reversion", bool_optvalue);
+  laser.setlidaropt(LidarPropReversion, &bool_optvalue, sizeof(bool));
+
+  // inverted
+  bool_optvalue = true;
+  node->declare_parameter("inverted", bool_optvalue);
+  node->get_parameter("inverted", bool_optvalue);
+  laser.setlidaropt(LidarPropInverted, &bool_optvalue, sizeof(bool));
+
+  // auto reconnect
+  bool_optvalue = true;
+  node->declare_parameter("auto_reconnect", bool_optvalue);
+  node->get_parameter("auto_reconnect", bool_optvalue);
+  laser.setlidaropt(LidarPropAutoReconnect, &bool_optvalue, sizeof(bool));
+
+  // single channel
+  bool_optvalue = false;
+  node->declare_parameter("isSingleChannel", bool_optvalue);
+  node->get_parameter("isSingleChannel", bool_optvalue);
+  laser.setlidaropt(LidarPropSingleChannel, &bool_optvalue, sizeof(bool));
+
+  // intensity
+  bool_optvalue = false;
+  node->declare_parameter("intensity", bool_optvalue);
+  node->get_parameter("intensity", bool_optvalue);
+  laser.setlidaropt(LidarPropIntenstiy, &bool_optvalue, sizeof(bool));
+
+  // support motor DTR
+  bool_optvalue = false;
+  node->declare_parameter("support_motor_dtr", bool_optvalue);
+  node->get_parameter("support_motor_dtr", bool_optvalue);
+  laser.setlidaropt(LidarPropSupportMotorDtrCtrl, &bool_optvalue, sizeof(bool));
+
+  // debug
+  bool_optvalue = false;
+  node->declare_parameter("debug", bool_optvalue);
+  node->get_parameter("debug", bool_optvalue);
+  laser.setEnableDebug(bool_optvalue);
+
+  // max & min angle
+  float_optvalue = 180.0f;
+  node->declare_parameter("angle_max", float_optvalue);
+  node->get_parameter("angle_max", float_optvalue);
+  laser.setlidaropt(LidarPropMaxAngle, &float_optvalue, sizeof(float));
+
+  float_optvalue = -180.0f;
+  node->declare_parameter("angle_min", float_optvalue);
+  node->get_parameter("angle_min", float_optvalue);
+  laser.setlidaropt(LidarPropMinAngle, &float_optvalue, sizeof(float));
+
+  // max & min range
+  float_optvalue = 64.0f;
+  node->declare_parameter("range_max", float_optvalue);
+  node->get_parameter("range_max", float_optvalue);
+  laser.setlidaropt(LidarPropMaxRange, &float_optvalue, sizeof(float));
+
+  float_optvalue = 0.1f;
+  node->declare_parameter("range_min", float_optvalue);
+  node->get_parameter("range_min", float_optvalue);
+  laser.setlidaropt(LidarPropMinRange, &float_optvalue, sizeof(float));
+
+  // scan frequency
+  float_optvalue = 10.0f;
+  node->declare_parameter("frequency", float_optvalue);
+  node->get_parameter("frequency", float_optvalue);
+  laser.setlidaropt(LidarPropScanFrequency, &float_optvalue, sizeof(float));
+
+  // invalid range handling
+  bool_optvalue = false;
+  node->declare_parameter("invalid_range_is_inf", bool_optvalue);
+  node->get_parameter("invalid_range_is_inf", bool_optvalue);
+
+  // initialize and start
   bool ret = laser.initialize();
-  if (ret) 
-  {
-    //设置GS工作模式（非GS雷达请无视该代码）
-    int i_v = 0;
-    node->declare_parameter<int>("m1_mode", 0);
-    node->get_parameter("m1_mode", i_v);
-    laser.setWorkMode(i_v, 0x01);
-    i_v = 0;
-    node->declare_parameter<int>("m2_mode", 0);
-    node->get_parameter("m2_mode", i_v);
-    laser.setWorkMode(i_v, 0x02);
-    i_v = 1;
-    node->declare_parameter<int>("m3_mode", 0);
-    node->get_parameter("m3_mode", i_v);
-    laser.setWorkMode(i_v, 0x04);
-    //启动扫描
+  if (ret) {
+    int mode = 0;
+    node->declare_parameter("m1_mode", mode);
+    node->get_parameter("m1_mode", mode);
+    laser.setWorkMode(mode, 0x01);
+    mode = 0;
+    node->declare_parameter("m2_mode", mode);
+    node->get_parameter("m2_mode", mode);
+    laser.setWorkMode(mode, 0x02);
+    mode = 1;
+    node->declare_parameter("m3_mode", mode);
+    node->get_parameter("m3_mode", mode);
+    laser.setWorkMode(mode, 0x04);
     ret = laser.turnOn();
-  } 
-  else 
-  {
-    RCLCPP_ERROR(node->get_logger(), "%s\n", laser.DescribeError());
+  } else {
+    RCLCPP_ERROR(node->get_logger(), "%s", laser.DescribeError());
   }
-  
+
+  // publishers
   auto laser_pub = node->create_publisher<sensor_msgs::msg::LaserScan>("scan", rclcpp::SensorDataQoS());
-  auto pc2_pub = node->create_publisher<sensor_msgs::msg::PointCloud2>("point_cloud2", rclcpp::SensorDataQoS());
+  auto pc2_pub   = node->create_publisher<sensor_msgs::msg::PointCloud2>("point_cloud2", rclcpp::SensorDataQoS());
 
-  auto stop_scan_service =
-    [&laser](const std::shared_ptr<rmw_request_id_t> request_header,
-  const std::shared_ptr<std_srvs::srv::Empty::Request> req,
-  std::shared_ptr<std_srvs::srv::Empty::Response> response) -> bool
-  {
-    return laser.turnOff();
-  };
+  // services
+  auto stop_scan_callback = [&laser](
+    const std::shared_ptr<rmw_request_id_t>, 
+    const std::shared_ptr<std_srvs::srv::Empty::Request>, 
+    std::shared_ptr<std_srvs::srv::Empty::Response>) -> bool
+  { return laser.turnOff(); };
+  node->create_service<std_srvs::srv::Empty>("stop_scan", stop_scan_callback);
 
-  auto stop_service = node->create_service<std_srvs::srv::Empty>("stop_scan",stop_scan_service);
-
-  auto start_scan_service =
-    [&laser](const std::shared_ptr<rmw_request_id_t> request_header,
-  const std::shared_ptr<std_srvs::srv::Empty::Request> req,
-  std::shared_ptr<std_srvs::srv::Empty::Response> response) -> bool
-  {
-    return laser.turnOn();
-  };
-
-  auto start_service = node->create_service<std_srvs::srv::Empty>("start_scan",start_scan_service);
+  auto start_scan_callback = [&laser](
+    const std::shared_ptr<rmw_request_id_t>, 
+    const std::shared_ptr<std_srvs::srv::Empty::Request>, 
+    std::shared_ptr<std_srvs::srv::Empty::Response>) -> bool
+  { return laser.turnOn(); };
+  node->create_service<std_srvs::srv::Empty>("start_scan", start_scan_callback);
 
   rclcpp::WallRate loop_rate(20);
 
-  while (ret && rclcpp::ok()) 
-  {
+  while (ret && rclcpp::ok()) {
     LaserScan scan;
-    if (laser.doProcessSimple(scan)) 
-    {
-      auto scan_msg = std::make_shared<sensor_msgs::msg::LaserScan>();
-
-      scan_msg->header.stamp.sec = RCL_NS_TO_S(scan.stamp);
-      scan_msg->header.stamp.nanosec =  scan.stamp - RCL_S_TO_NS(scan_msg->header.stamp.sec);
-      scan_msg->header.frame_id = frame_id;
-      scan_msg->angle_min = scan.config.min_angle;
-      scan_msg->angle_max = scan.config.max_angle;
-      scan_msg->angle_increment = scan.config.angle_increment;
-      scan_msg->scan_time = scan.config.scan_time;
-      scan_msg->time_increment = scan.config.time_increment;
-      scan_msg->range_min = scan.config.min_range;
-      scan_msg->range_max = scan.config.max_range;
-      
-      int size = (scan.config.max_angle - scan.config.min_angle)/ scan.config.angle_increment + 1;
-      scan_msg->ranges.resize(size);
-      scan_msg->intensities.resize(size);
-      for (size_t i=0; i < scan.points.size(); i++) 
-      {
-        const auto& p = scan.points.at(i);
-        int index = std::ceil((scan.points[i].angle - scan.config.min_angle)/scan.config.angle_increment);
-        if(index >=0 && index < size) {
-          scan_msg->ranges[index] = scan.points[i].range;
-          scan_msg->intensities[index] = scan.points[i].intensity;
-        }
-      }
-      laser_pub->publish(*scan_msg);
-
-      // ---- PointCloud2 Construction ----
-      sensor_msgs::msg::PointCloud2 pc2_msg;
-      pc2_msg.header = scan_msg->header;
-      pc2_msg.height = 1;
-      pc2_msg.width = scan.points.size();
-      pc2_msg.is_dense = false;
-
-      // Fields: x, y, z, intensity
-      pc2_msg.fields.resize(4);
-      pc2_msg.fields[0].name = "x";
-      pc2_msg.fields[0].offset = 0;
-      pc2_msg.fields[0].datatype = sensor_msgs::msg::PointField::FLOAT32;
-      pc2_msg.fields[0].count = 1;
-      pc2_msg.fields[1].name = "y";
-      pc2_msg.fields[1].offset = 4;
-      pc2_msg.fields[1].datatype = sensor_msgs::msg::PointField::FLOAT32;
-      pc2_msg.fields[1].count = 1;
-      pc2_msg.fields[2].name = "z";
-      pc2_msg.fields[2].offset = 8;
-      pc2_msg.fields[2].datatype = sensor_msgs::msg::PointField::FLOAT32;
-      pc2_msg.fields[2].count = 1;
-      pc2_msg.fields[3].name = "intensity";
-      pc2_msg.fields[3].offset = 12;
-      pc2_msg.fields[3].datatype = sensor_msgs::msg::PointField::FLOAT32;
-      pc2_msg.fields[3].count = 1;
-
-      pc2_msg.point_step = 16; // 4 fields x 4 bytes
-      pc2_msg.row_step = pc2_msg.point_step * pc2_msg.width;
-      pc2_msg.data.resize(pc2_msg.row_step * pc2_msg.height);
-
-      uint8_t* data_ptr = pc2_msg.data.data();
-      for (size_t i = 0; i < scan.points.size(); ++i) {
-          float angle = scan.points[i].angle;
-          float range = scan.points[i].range;
-          float intensity = scan.points[i].intensity;
-          float x = range * cos(angle);
-          float y = range * sin(angle);
-          float z = 0.0f;
-
-          memcpy(data_ptr + i * pc2_msg.point_step + 0,  &x, sizeof(float));
-          memcpy(data_ptr + i * pc2_msg.point_step + 4,  &y, sizeof(float));
-          memcpy(data_ptr + i * pc2_msg.point_step + 8,  &z, sizeof(float));
-          memcpy(data_ptr + i * pc2_msg.point_step + 12, &intensity, sizeof(float));
-      }
-
-      pc2_pub->publish(pc2_msg);
-    } 
-    else 
-    {
+    if (!laser.doProcessSimple(scan)) {
       RCLCPP_ERROR(node->get_logger(), "Failed to get scan");
+      continue;
     }
-    if(!rclcpp::ok()) 
-    {
-      break;
+
+    // --- Publish LaserScan ---
+    auto scan_msg = std::make_shared<sensor_msgs::msg::LaserScan>();
+    scan_msg->header.stamp.sec = RCL_NS_TO_S(scan.stamp);
+    scan_msg->header.stamp.nanosec = scan.stamp - RCL_S_TO_NS(scan_msg->header.stamp.sec);
+    scan_msg->header.frame_id = frame_id;
+    scan_msg->angle_min = scan.config.min_angle;
+    scan_msg->angle_max = scan.config.max_angle;
+    scan_msg->angle_increment = scan.config.angle_increment;
+    scan_msg->scan_time = scan.config.scan_time;
+    scan_msg->time_increment = scan.config.time_increment;
+    scan_msg->range_min = scan.config.min_range;
+    scan_msg->range_max = scan.config.max_range;
+    int count = static_cast<int>((scan.config.max_angle - scan.config.min_angle) / scan.config.angle_increment) + 1;
+    scan_msg->ranges.resize(count);
+    scan_msg->intensities.resize(count);
+
+    for (auto &pt : scan.points) {
+      int idx = std::lround((pt.angle - scan.config.min_angle) / scan.config.angle_increment);
+      if (idx >= 0 && idx < count && pt.range >= scan.config.min_range && pt.range <= scan.config.max_range) {
+        scan_msg->ranges[idx]     = pt.range;
+        scan_msg->intensities[idx] = pt.intensity;
+      }
     }
+    laser_pub->publish(*scan_msg);
+
+    // --- Build & Publish PointCloud2 ---
+    std::vector<LaserPoint> valid_pts;
+    valid_pts.reserve(scan.points.size());
+    for (auto &pt : scan.points) {
+      if (pt.range >= scan.config.min_range && pt.range <= scan.config.max_range) {
+        valid_pts.push_back(pt);
+      }
+    }
+
+    sensor_msgs::msg::PointCloud2 pc2_msg;
+    pc2_msg.header = scan_msg->header;
+    pc2_msg.height = 1;
+    pc2_msg.width = valid_pts.size();
+    pc2_msg.is_bigendian = false;
+    pc2_msg.is_dense = false;
+
+    // define fields
+    pc2_msg.fields = {
+      sensor_msgs::msg::PointField{"x", 0,  sensor_msgs::msg::PointField::FLOAT32, 1},
+      sensor_msgs::msg::PointField{"y", 4,  sensor_msgs::msg::PointField::FLOAT32, 1},
+      sensor_msgs::msg::PointField{"z", 8,  sensor_msgs::msg::PointField::FLOAT32, 1},
+      sensor_msgs::msg::PointField{"intensity", 12, sensor_msgs::msg::PointField::FLOAT32, 1},
+      sensor_msgs::msg::PointField{"stamp_offset", 16, sensor_msgs::msg::PointField::FLOAT32, 1}
+    };
+    pc2_msg.point_step = sizeof(float) * 5;
+    pc2_msg.row_step = pc2_msg.point_step * pc2_msg.width;
+    pc2_msg.data.resize(pc2_msg.row_step);
+
+    sensor_msgs::PointCloud2Iterator<float> it_x(pc2_msg, "x");
+    sensor_msgs::PointCloud2Iterator<float> it_y(pc2_msg, "y");
+    sensor_msgs::PointCloud2Iterator<float> it_z(pc2_msg, "z");
+    sensor_msgs::PointCloud2Iterator<float> it_i(pc2_msg, "intensity");
+    sensor_msgs::PointCloud2Iterator<float> it_s(pc2_msg, "stamp_offset");
+
+    for (size_t i = 0; i < valid_pts.size(); ++i, ++it_x, ++it_y, ++it_z, ++it_i, ++it_s) {
+      it_x = valid_pts[i].range * std::cos(valid_pts[i].angle);
+      it_y = valid_pts[i].range * std::sin(valid_pts[i].angle);
+      it_z = 0.0f;
+      it_i = valid_pts[i].intensity;
+      it_s = i * scan.config.time_increment;
+    }
+
+    pc2_pub->publish(pc2_msg);
+
     rclcpp::spin_some(node);
     loop_rate.sleep();
   }
@@ -306,6 +301,5 @@ int main(int argc, char *argv[]) {
   laser.turnOff();
   laser.disconnecting();
   rclcpp::shutdown();
-
   return 0;
 }
