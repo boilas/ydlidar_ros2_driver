@@ -23,14 +23,16 @@
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp/time_source.hpp"
 #include "sensor_msgs/msg/laser_scan.hpp"
+#include "sensor_msgs/msg/point_cloud2.hpp"
+#include "sensor_msgs/msg/point_field.hpp"
 #include "std_srvs/srv/empty.hpp"
 #include <vector>
 #include <iostream>
 #include <string>
 #include <signal.h>
+#include <cstring>
 
 #define ROS2Verision "1.0.1"
-
 
 int main(int argc, char *argv[]) {
   rclcpp::init(argc, argv);
@@ -185,6 +187,7 @@ int main(int argc, char *argv[]) {
   }
   
   auto laser_pub = node->create_publisher<sensor_msgs::msg::LaserScan>("scan", rclcpp::SensorDataQoS());
+  auto pc2_pub = node->create_publisher<sensor_msgs::msg::PointCloud2>("point_cloud2", rclcpp::SensorDataQoS());
 
   auto stop_scan_service =
     [&laser](const std::shared_ptr<rmw_request_id_t> request_header,
@@ -208,7 +211,6 @@ int main(int argc, char *argv[]) {
 
   rclcpp::WallRate loop_rate(20);
 
-  //std::ofstream file("pointcloud_data.txt"); // 打开文件流
   while (ret && rclcpp::ok()) 
   {
     LaserScan scan;
@@ -238,9 +240,55 @@ int main(int argc, char *argv[]) {
           scan_msg->ranges[index] = scan.points[i].range;
           scan_msg->intensities[index] = scan.points[i].intensity;
         }
-        //file << "i:" << i << ",a:" << p.angle << ",d:" << p.range << ",p:" << p.intensity << std::endl;
       }
       laser_pub->publish(*scan_msg);
+
+      // ---- PointCloud2 Construction ----
+      sensor_msgs::msg::PointCloud2 pc2_msg;
+      pc2_msg.header = scan_msg->header;
+      pc2_msg.height = 1;
+      pc2_msg.width = scan.points.size();
+      pc2_msg.is_dense = false;
+
+      // Fields: x, y, z, intensity
+      pc2_msg.fields.resize(4);
+      pc2_msg.fields[0].name = "x";
+      pc2_msg.fields[0].offset = 0;
+      pc2_msg.fields[0].datatype = sensor_msgs::msg::PointField::FLOAT32;
+      pc2_msg.fields[0].count = 1;
+      pc2_msg.fields[1].name = "y";
+      pc2_msg.fields[1].offset = 4;
+      pc2_msg.fields[1].datatype = sensor_msgs::msg::PointField::FLOAT32;
+      pc2_msg.fields[1].count = 1;
+      pc2_msg.fields[2].name = "z";
+      pc2_msg.fields[2].offset = 8;
+      pc2_msg.fields[2].datatype = sensor_msgs::msg::PointField::FLOAT32;
+      pc2_msg.fields[2].count = 1;
+      pc2_msg.fields[3].name = "intensity";
+      pc2_msg.fields[3].offset = 12;
+      pc2_msg.fields[3].datatype = sensor_msgs::msg::PointField::FLOAT32;
+      pc2_msg.fields[3].count = 1;
+
+      pc2_msg.point_step = 16; // 4 fields x 4 bytes
+      pc2_msg.row_step = pc2_msg.point_step * pc2_msg.width;
+      pc2_msg.data.resize(pc2_msg.row_step * pc2_msg.height);
+
+      uint8_t* data_ptr = pc2_msg.data.data();
+      for (size_t i = 0; i < scan.points.size(); ++i) {
+          float angle = scan.points[i].angle;
+          float range = scan.points[i].range;
+          float intensity = scan.points[i].intensity;
+          float x = range * cos(angle);
+          float y = range * sin(angle);
+          float z = 0.0f;
+
+          memcpy(data_ptr + i * pc2_msg.point_step + 0,  &x, sizeof(float));
+          memcpy(data_ptr + i * pc2_msg.point_step + 4,  &y, sizeof(float));
+          memcpy(data_ptr + i * pc2_msg.point_step + 8,  &z, sizeof(float));
+          memcpy(data_ptr + i * pc2_msg.point_step + 12, &intensity, sizeof(float));
+      }
+
+      pc2_pub->publish(pc2_msg);
     } 
     else 
     {
